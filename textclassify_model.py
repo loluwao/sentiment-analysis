@@ -5,15 +5,16 @@
 import numpy as np
 import sys
 from collections import Counter
-import math
-import nltk
 
 """
 Your name and file comment here:
+Temi Akinyoade, textclassify_model.py
 """
 
 """
 Cite your sources here:
+stopwords: https://gist.github.com/sebleier/554280
+positive and negative sentiment words: https://www.cs.uic.edu/~liub/FBS/sentiment-analysis.html
 """
 
 """
@@ -26,7 +27,7 @@ negatives = ["didn't", "not", "no", "none"]
 def generate_tuples_from_file(training_file_path):
     """
     Generates tuples from file formated like:
-    id\ttext\tlabel
+    id\text\tlabel
     Parameters:
       training_file_path - str path to file to read in
     Return:
@@ -90,13 +91,6 @@ def recall(gold_labels, predicted_labels):
 
 
 def f1(gold_labels, predicted_labels):
-    """
-    Calculates the f1 for a set of predicted labels give the gold (ground truth) labels.
-    Parameters:
-        gold_labels (list): a list of labels assigned by hand ("truth")
-        predicted_labels (list): a corresponding list of labels predicted by the system
-    Returns: double f1 (a number from 0 to 1)
-    """
     # calc precision and recall
     p = precision(gold_labels, predicted_labels)
     r = recall(gold_labels, predicted_labels)
@@ -105,15 +99,6 @@ def f1(gold_labels, predicted_labels):
         return 0
 
     return 2 * p * r / (p + r)
-
-
-"""
-Implement any other non-required functions here
-"""
-
-"""
-implement your TextClassify class here
-"""
 
 
 class TextClassify:
@@ -136,21 +121,15 @@ class TextClassify:
 
         self.positive_word_count, self.negative_word_count = 0, 0
 
+        # gold_labels: correct labels, predicted labels: labels calculated by my model
         self.gold_labels = []
         self.predicted_labels = []
 
     def train(self, examples):
-        """
-        Trains the classifier based on the given examples
-        Parameters:
-          examples - a list of tuples of strings formatted [(id, example_text, label), (id, example_text, label)....]
-        Return: None
-        """
         positive_txt = []
         negative_txt = []
 
         self.data = examples
-
         for example in examples:
             if example[2] == '1':  # positive review
                 positive_txt += example[1].split()
@@ -168,21 +147,11 @@ class TextClassify:
         self.positive_toks = dict(Counter(positive_txt))
         self.negative_toks = dict(Counter(negative_txt))
 
-        # created vocab list from sorted tokens
-        # self.vocab = [*set(list(self.positive_toks.keys()) + list(self.negative_toks.keys()))]
-        # print("Vocab: " + str(self.vocab))
-
         # calculate prior probabilities
         self.pos_prior = len(self.pos_ids) / len(examples)
         self.neg_prior = len(self.neg_ids) / len(examples)
 
     def score(self, data):
-        """
-        Score a given piece of text
-        Parameters:
-          data - str like "I loved the hotel"
-        Return: dict of class: score mappings
-        """
         scores = {'0': 1.0, '1': 1.0}
 
         data_ls = data.split()
@@ -191,6 +160,7 @@ class TextClassify:
         pos_calc, neg_calc = [], []
         numerator = 0
 
+        # find positive and negative probabilities for each token in data/"line"
         for tok in data_ls:
             if tok in self.vocab:
                 if self.positive_toks.get(tok) is None:
@@ -210,27 +180,22 @@ class TextClassify:
         for x in neg_calc:
             scores['0'] *= x
 
+        # multiply total P(w | c) probabilities by priors
         scores['1'] *= self.pos_prior
         scores['0'] *= self.neg_prior
 
         return scores
 
-
     def classify(self, data):
-        """
-        Label a given piece of text
-        Parameters:
-          data - str like "I loved the hotel"
-        Return: string class label
-        """
         scores = self.score(data)
-        return max(scores, key=scores.get)
 
+        # return key with maximum score
+        return max(scores, key=scores.get)
 
     def classify_all(self):
         classifications = {}
-
         # go thru every example
+        # create dictionary of {key: data, value: class}
         for tup in self.data:
             # fill gold labels
             self.gold_labels += tup[2]
@@ -240,36 +205,21 @@ class TextClassify:
 
         return classifications
 
-
-    # THIS ONE IS MULTINOMIAL
     def featurize(self, data):
-        """
-        we use this format to make implementation of your TextClassifyImproved model more straightforward and to be
-        consistent with what you see in nltk
-        Parameters:
-          data - str like "I loved the hotel"
-        Return: a list of tuples linking features to values
-        for BoW, a list of tuples linking every word to True [("I", True), ("loved", True), ("it", True)]
-        """
         return [(word, True) for word in data]
-
 
     def __str__(self):
         return "Naive Bayes - bag-of-words baseline"
 
 
 class TextClassifyImproved:
-    '''
-    Normalize text in 2 ways:
-      change "not good" to not_good in txt
-      make words w one capital letter just lowercase
-    '''
-
     def __init__(self):
         self.data = []  # list of tuples
 
+        # all tokens seen in positive and negative reviews
         self.positive_toks = {}
         self.negative_toks = {}
+
         self.pos_ids = []
         self.neg_ids = []
 
@@ -285,22 +235,53 @@ class TextClassifyImproved:
         self.gold_labels = []
         self.predicted_labels = []
 
+        self.pos_lex = []
+        self.neg_lex = []
+
+        self.stopwords = []
+
+    def load_neg_lex(self):
+        """
+        Reads in all negative words from word list into an array.
+        """
+        f = open("negative-words.txt", "r")
+        words = f.read().splitlines()
+        f.close()
+        self.neg_lex = [word for word in words]
+
+    def load_pos_lex(self):
+        """
+        Reads in all positive words from word list into an array.
+        """
+        f = open("positive-words.txt", "r")
+        words = f.read().splitlines()
+        f.close()
+        self.pos_lex = [word for word in words]
+
+    def load_stopwords(self):
+        """
+        Read in all stop words from word list into an array.
+        """
+        f = open("stopwords.txt", "r")
+        self.stopwords = f.read().splitlines()
+        f.close()
+
     def not_helper(self, text):
-        '''
-        Modifies strings that contain "not" so that "not good" becomes "NOT_good"
-        :param text:
-        :return: String with not-normalization
-        '''
-        # split text into a list
+        """
+        Modifies any given text in cases of negation.
+        ex: "I'm not happy" -> "I'm NOT_happy", so "not" and "happy" become one token.
+        ... "I didn't enjoy this" -> "I NOT_enjoy this"
+        """
+
+        # split text into a list and have new list to return
         text_ls = text.split()
         modified_ls = []
-        # find "not" or other negation if in string
-        not_on = False
+
+        # find all negation words in string
         for i in range(len(text_ls)):
             if text_ls[i].lower() in negatives:
                 if i < len(text_ls) - 1:
                     modified_ls.append("NOT_" + text_ls[i + 1])
-
                 else:
                     modified_ls.append(text_ls[i])  # add not
             else:
@@ -314,31 +295,24 @@ class TextClassifyImproved:
 
     def normalize_helper(self, text):
         '''
-        Normalizes the text by modifying capital letters, removing periods
-        remove commas
-        shave spaces
-        :param text:
-        :return:
+        Extra text normalization.
+        - removes punctuation I deemed as unimportant or not indicative
+        - modifies awkward or first-word capitalization
+        "(2007)" -> "2007"
+        ""wow!"" -> "wow"
+        "Hello" -> "hello"
+        "BAD" -> "BAD" (doesn't change because capitalization may be a sentiment indicator)
         '''
-        print(text)
 
         text_ls = text.split()
         mod_word = ""
         new_text = []
-        # text_ls = nltk.word_tokenize(text)
         irrelevant_characters = ['.', ',', '!', '?', '\"', ')', '(']
         for word in text_ls:
             # remove punctuation?
             mod_word = word
             for char in irrelevant_characters:
                 mod_word = mod_word.replace(char, '')
-            '''
-            mod_word = word.replace('.', '')
-            mod_word = mod_word.replace(',', '')
-            mod_word = mod_word.replace('!', '')
-            mod_word = mod_word.replace('?', '')
-            mod_word = mod_word.replace('\"', '')
-            '''
 
             # normalize capitalization
             if not mod_word.isupper():
@@ -351,6 +325,12 @@ class TextClassifyImproved:
         positive_txt = []
         negative_txt = []
 
+        self.load_pos_lex()
+        self.load_neg_lex()
+        self.load_stopwords()
+        print("done loading words")
+
+        # iterate thru all examples and sort normalized text into object's data
         for example in examples:
             if example[2] == '1':  # positive review
                 normalized_txt = self.not_helper(self.normalize_helper(example[1]))
@@ -368,18 +348,18 @@ class TextClassifyImproved:
         self.negative_word_count = len(negative_txt)
         self.vocab = list(dict(Counter(negative_txt + positive_txt)))
 
+        # remove stop words from vocab
+        for word in self.stopwords:
+            if word in self.vocab:
+                self.vocab.remove(word)
+
         # token counts for negative and positive reviews
         self.positive_toks = dict(Counter(positive_txt))
         self.negative_toks = dict(Counter(negative_txt))
 
-        # created vocab list from sorted tokens
-        # self.vocab = [*set(list(self.positive_toks.keys()) + list(self.negative_toks.keys()))]
-        # print("Vocab: " + str(self.vocab))
-
         # calculate prior probabilities
         self.pos_prior = len(self.pos_ids) / len(examples)
         self.neg_prior = len(self.neg_ids) / len(examples)
-        # make this "into the appropriate features"
 
     def score(self, data):
         """
@@ -394,11 +374,13 @@ class TextClassifyImproved:
         """
         scores = {'0': 1.0, '1': 1.0}
 
+        # split tokens of data item into a list of Strings
         data_ls = data.split()
 
         # calculations for each token in the data
         pos_calc, neg_calc = [], []
 
+        # iterate thru each token
         for tok in data_ls:
             if tok in self.vocab:
                 if self.positive_toks.get(tok) is None:
@@ -413,15 +395,46 @@ class TextClassifyImproved:
                     numerator = self.negative_toks[tok]
                 neg_calc.append((numerator + 1) / (self.negative_word_count + len(self.vocab)))
 
+        # calc BoW probabilities
+        bow_pos = 1
+        bow_neg = 1
         for x in pos_calc:
-            scores['1'] *= x
+            bow_pos *= x
         for x in neg_calc:
-            scores['0'] *= x
+            bow_neg *= x
 
-        scores['1'] *= self.pos_prior
-        scores['0'] *= self.neg_prior
+        # count positive and negative words and map in dictionaries
+        data_pos_lex = []
+        data_neg_lex = []
 
-        # print(scores)
+        for word in data_ls:
+            if word in self.pos_lex:
+                data_pos_lex.append(word)
+
+        for word in data_ls:
+            if word in self.neg_lex:
+                data_neg_lex.append(word)
+
+        num_pos_words = len(data_pos_lex)
+        num_neg_words = len(data_neg_lex)
+
+        # calculate total probability
+        total_pos_prob, total_neg_prob = 0, 0
+
+        if num_pos_words == 0:
+            total_pos_prob = np.log(bow_pos) + np.log(self.pos_prior)
+        else:
+            total_pos_prob = np.log(bow_pos) + np.log(num_pos_words / (num_pos_words + num_neg_words)) + np.log(
+                self.pos_prior)
+
+        if num_neg_words == 0:
+            total_neg_prob = np.log(bow_neg) + np.log(self.neg_prior)
+        else:
+            total_neg_prob = np.log(bow_neg) + np.log(num_neg_words / (num_pos_words + num_neg_words)) + np.log(
+                self.neg_prior)
+
+        scores['1'] = np.exp(total_pos_prob)
+        scores['0'] = np.exp(total_neg_prob)
 
         return scores
 
@@ -437,7 +450,6 @@ class TextClassifyImproved:
 
     def classify_all(self):
         classifications = {}
-
         # go thru every example
         for tup in self.data:
             # fill gold labels
@@ -445,7 +457,6 @@ class TextClassifyImproved:
             pred_score = self.classify(tup[1])
             self.predicted_labels += pred_score
             classifications[tup[1]] = pred_score
-            print("DONE - " + tup[1])
 
         return classifications
 
@@ -465,8 +476,13 @@ class TextClassifyImproved:
 
     def describe_experiments(self):
         s = """
-    Description of your experiments and their outcomes here.
-    """
+            The first thing I did was extra text normalization. This had a very minimal but observable
+            affect on the F1 score, as it increased by around 0.02 from the baseline model.
+            Then, I implemented the counts of positive or negative words. This had a very big affect on
+            the F1 score. This time it increased by at least 0.2.
+            The last thing I did was remove all stop words. This also had a minimal but positive affect
+            on my F1 score.
+            """
         return s
 
 
@@ -474,8 +490,6 @@ def main():
     training = sys.argv[1]
     testing = sys.argv[2]
 
-    # print(generate_tuples_from_file(training))
-    '''
     classifier = TextClassify()
     print("training")
     classifier.train(generate_tuples_from_file(training))
@@ -484,52 +498,36 @@ def main():
 
     print("classifying each sample")
     weak_class = classifier.classify_all()
-    print("Calculating precision.")
+    print("calculating precision")
     p1 = precision(classifier.gold_labels, classifier.predicted_labels)
-    print("Calculating recall.")
+    print("calculating recall")
     r1 = recall(classifier.gold_labels, classifier.predicted_labels)
-    print("Calculating F1.")
+    print("calculating F1 score")
     f11 = f1(classifier.gold_labels, classifier.predicted_labels)
-    
-    #for text, num in weak_class.items():
-        #print(str(num) + " - " + text)
-    
 
-    print("\nprecision: " + str(p1))
+    print("precision: " + str(p1))
     print("recall: " + str(r1))
-    print("f1: " + str(f11))
-    '''
-
-    improved = TextClassifyImproved()
-    print(improved)
-
+    print("f1: " + str(f11) + "\n")
 
     # better classifier
     better_classifier = TextClassifyImproved()
-    print(better_classifier.normalize_helper("This is WITHOUT a doubt one of the best movies I have ever seen. The first time I saw it I was about 9 or 10 years old. I began looking sometime before the rape scene. And when I saw it I was really shocked thinking \"What kinda sick movie is this?\". Today I've seen it from the beginning and really understood how great this movie really is. It's exciting, frightening, shocking and in it's own unique way disturbing. But the best thing about it is the ending where the audience is shown that this experience will haunt the characters for the rest of their lifes. It'll torture their conscience and they will worry for the rest of their lifes about the bodies being found in that river. And there is nothing they can do about it, it's something they have to live with. This ending is one of the most unhappy endings in movie history and very smart, brilliant and horrifyingAnd the acting is also great, especially Jon Voight and Burt Reynolds. Magnificent acting in this movie. All in all, John Boorman has created one of the best movies throughout movie history based on Dick Chaney's novel. A must see for all the movie lovers"))
-
-
+    print(better_classifier)
     print("training...")
     better_classifier.train(generate_tuples_from_file(training))
-    print(better_classifier)
+
     # report precision, recall, f1
     print("classifying all...")
     goat_class = better_classifier.classify_all()
     p1 = precision(better_classifier.gold_labels, better_classifier.predicted_labels)
     r1 = recall(better_classifier.gold_labels, better_classifier.predicted_labels)
     f11 = f1(better_classifier.gold_labels, better_classifier.predicted_labels)
-    #for text, num in weak_class.items():
-        #print(str(bin) + " - " + text)
 
     print("\nprecision: " + str(p1))
     print("recall: " + str(r1))
     print("f1: " + str(f11))
-    improved = TextClassifyImproved()
-    print(improved)
-    
-    # report a summary of your experiments/features here
-    print(improved.describe_experiments())
 
+    # report a summary of your experiments/features here
+    print(better_classifier.describe_experiments())
 
 
 if __name__ == "__main__":
